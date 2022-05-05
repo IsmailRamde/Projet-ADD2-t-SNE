@@ -1,0 +1,391 @@
+---
+title: "Projet ADD, t-SNE"
+author: "Kevin McKenna, Ismaïl Ramdé, Fanny Rebiffé"
+date: "4/14/2021"
+output:
+  pdf_document: 
+    fig_height: 4 
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+print(getwd())
+load("./workspace.RData")
+
+```
+
+```{r, include=FALSE}
+library(FactoMineR)
+library(tidyverse)
+library(factoextra)
+library(Rtsne)
+library(microbenchmark)
+library(gridExtra)
+library(RColorBrewer)
+library(grDevices)
+library(ggpointdensity)
+library(plotrix)
+library(kableExtra)
+library(papeR)
+```
+
+```{r, include=FALSE}
+load("./Projet-6_tSNE/otu.Rdata")
+# Y <- as.data.frame(X)
+# Y.pca <- PCA(X, ncp=150)
+```
+
+# Introduction
+
+Les techniques de réduction de dimensions occupent une grande place dans le domaine de la statistique. Elles prennent toute leur importance quand on a affaire à des données de très grande taille (dimensions). Pour cela nous nous intéressons en particulier à deux méthode très connus notamment t-sne ((t-distributed Stochastic Neighbor Embedding) et l’ACP (Analyse en Composantes principales). Toutefois il faut noter que ces méthodes ne conservent pas la totalité des informations contenues dans les données initiales. L’enjeu est donc de trouver un juste milieu entre réduction de dimension et perte d’informations.
+Dans les lignes qui suivent nous étudierons ces deux méthodes tout en les mettant en opposition afin d’en déduire les forces et faiblesses de chacune d’elle.
+
+# Description du tSNE
+Tsne (t-distributed Stochastic Neighbor Embedding), dont le t désigne une loi t de student, est une technique de réduction de dimensions non linéaire par apprentissage automatique. Elle permet de visualiser des données de très grandes dimensions à travers un prolongement dans une variété de plus petite dimension afin de mettre en lumière des caractéristiques intéressantes. 
+
+Contrairement à certaines méthodes comme l’ACP qui préserve une grande distance par paire pour maximiser la variance et MDS qui vise à préserver le classement des distances entre les espaces d'entrée et de sortie, t-SNE met l’accent sur les petites distances. En d’autres termes il ne préserve que les similitudes locales. Sa force réside dans la création de clusters compacts pour la visualisation. En effet cette méthode prend en compte chaque point du jeu de données séparément et affecte une probabilité Pij conditionnelle (ou poids) gaussienne à chacun des autres points en fonction de leur distance par rapport à ce point. À l’issu de cela une nouvelle dimension inférieure au jeu de données est calculée à travers une nouvelle distribution Qij de t-student, qui minimise la divergence de Kullback-Leibler entre P et Q.
+Cette méthode permet d’obtenir un espace de dimension inférieur tout en respectant une distribution proche en Kullback-Leibler divergence d’origine.
+
+## Les paramètres: 
+Il possède plusieurs paramètres dont les principaux auxquels nous allons nous intéresser sont la **perplexité** , le **nombre de composants principaux** à conserver et le **nombre d'itérations** pour exécuter tSNE.
+
+- **initial_dims** (par défaut 50) si pca = TRUE alors la variable initial_dims conditionne le nombre de dimensions ou de composants principaux.
+- **perplexité** (par défaut 30) :
+elle représente la taille de la variance de pij c’est à dire la balance entre prise en compte de la structure globale et locale. En d’autre termes c’est une estimation du nombre de proches voisins par rapport à l’ensemble du jeu de données que possède chaque points.
+- **max_iter** (1000 par défaut) :
+C’est le nombre d’itération qu’il faut pour obtenir un résultat stable.
+
+
+```{r, include=FALSE}
+## En commentaire pour eviter que ca se lance par accident car il prend beaucoup de temps
+# t.p5.time <- microbenchmark(tsne.out.p5 <- Rtsne(Y.pca$ind$coord, pca=F, perplexity = 5), times=1L)
+# t.p10.time <- microbenchmark(tsne.out.p10 <- Rtsne(Y.pca$ind$coord, pca=F, perplexity = 10), times=1L)
+# t.p30.time <- microbenchmark(tsne.out.p30 <- Rtsne(Y.pca$ind$coord, pca=F), times=1L)
+# t.p60.time <- microbenchmark(tsne.out.p60 <- Rtsne(Y.pca$ind$coord, pca=F, perplexity = 60), times=1L)
+# t.p120.time <- microbenchmark(tsne.out.p120 <- Rtsne(Y.pca$ind$coord, pca=F, perplexity = 120), times=1L)
+# t.p300.time <- microbenchmark(tsne.out.p300 <- Rtsne(Y.pca$ind$coord, pca=F, perplexity = 300), times=1L)
+# 
+# t.60.100.time <- microbenchmark(tsne.out.p60.iter100 <- Rtsne(Y.pca$ind$coord, pca=F, perplexity = 60, max_iter = 100), times=1L)
+# t.60.500.time <- microbenchmark(tsne.out.p60.iter500 <- Rtsne(Y.pca$ind$coord, pca=F, perplexity = 60, max_iter = 500), times=1L)
+# t.60.1000.time <- microbenchmark(tsne.out.p60.iter1000 <- Rtsne(Y.pca$ind$coord, pca=F, perplexity = 60, max_iter = 1000), times=1L)
+# t.60.2000.time <- microbenchmark(tsne.out.p60.iter2000 <- Rtsne(Y.pca$ind$coord, pca=F, perplexity = 60, max_iter = 2000), times=1L)
+# t.60.3000.time <- microbenchmark(tsne.out.p60.iter3000 <- Rtsne(Y.pca$ind$coord, pca=F, perplexity = 60, max_iter = 3000), times=1L)
+# t.60.4000.time <- microbenchmark(tsne.out.p60.iter4000 <- Rtsne(Y.pca$ind$coord, pca=F, perplexity = 60, max_iter = 4000),times=1L)
+```
+
+
+```{r, include=FALSE}
+## Mettre le temps qu'il prends chaque lancer de tsne dans un data.frame
+# time.data <- data.frame(iterations=c(100,500,1000,2000,3000,4000), time.in.seconds = c((t.60.100.time[2]/10^9)[[1]], (t.60.500.time[2]/10^9)[[1]], (t.60.1000.time[2]/10^9)[[1]],
+#                                                                                        (t.60.2000.time[2]/10^9)[[1]], (t.60.3000.time[2]/10^9)[[1]], (t.60.4000.time[2]/10^9)[[1]]))
+# time.date2<- data.frame(perplexity=c(5,10,30,60,120,300), time.in.seconds = c((t.p5.time[2]/10^9)[[1]], (t.p10.time[2]/10^9)[[1]], (t.p30.time[2]/10^9)[[1]],
+#                                                                                        (t.p60.time[2]/10^9)[[1]], (t.p120.time[2]/10^9)[[1]], (t.p300.time[2]/10^9)[[1]]))
+```
+
+
+```{r, include=FALSE}
+# Changer tout en data.frame
+# df.p5.it1000 <- as.data.frame(tsne.out.p5$Y)
+# df.p10.it1000 <- as.data.frame(tsne.out.p10$Y)
+# df.p30.it1000 <- as.data.frame(tsne.out.p30$Y)
+# df.p60.it1000 <- as.data.frame(tsne.out.p60$Y)
+# df.p120.it1000 <- as.data.frame(tsne.out.p120$Y)
+# df.p300.it1000 <- as.data.frame(tsne.out.p300$Y)
+# 
+# df.p60.it100 <- as.data.frame(tsne.out.p60.iter100$Y)
+# df.p60.it500 <- as.data.frame(tsne.out.p60.iter500$Y)
+# df.p60.it1000 <- as.data.frame(tsne.out.p60.iter1000$Y)
+# df.p60.it2000 <- as.data.frame(tsne.out.p60.iter2000$Y)
+# df.p60.it3000 <- as.data.frame(tsne.out.p60.iter3000$Y)
+# df.p60.it4000 <- as.data.frame(tsne.out.p60.iter4000$Y)
+# 
+# df.pca <- as.data.frame(Y.pca$ind$coord[,1:2])
+```
+
+# Choix des paramètres
+Nous allons décrire la façon dont nous avons choisi la valeur de nos paramètres perplexité et maximum d'itérations. Tout d'abord, avec un nombre de données entre 50.000 et 100.000, une perplexité entre 50-100 suffi.  Il existe également un principe selon lequel la valeur de perplexité optimale est le racine du nombre de données, ici 100.  Pour le maximum d'iterations, il s'avère qu'il n'y a pas techniquement un maximum tant que cette valeur est inférieure au nombre de données. Cependant, à partir d'un certains nombre d'itérations, le résultat varie peu mais le calcul prend beaucoup de temps. Par contre, si il y a pas assez d'itérations, l'algorithme n'aura pas assez de boucles pour converger vers la solution et on obtiendra alors un mauvais modèle. Nous avons donc testé plusieurs valeurs pour trouver un modèle correct, c'est à dire le meilleur compromis temps de calcul, qualité du résultat. 
+
+```{r, echo=FALSE}
+#Creation du fonction pour les plots
+plottsne <- function(data, titre, palette) {
+  ggplot(data, aes(x=V1, y=V2)) +
+    geom_point(size=0.25) +
+    guides(colour=guide_legend(override.aes=list(size=6))) +
+    xlab("") + ylab("") +
+    ggtitle(titre) +
+    theme_light(base_size=5) +
+    theme(axis.text.x=element_blank(),
+          axis.text.y=element_blank()) +
+    scale_colour_brewer(palette = palette)
+}
+#Plot des differents perplexite
+grid.arrange(plottsne(df.p5.it1000, 'tSNE perplexite = 5, Max Iteration = 1000', 'Set2'),
+             plottsne(df.p10.it1000, 'tSNE perplexite = 10, Max Iteration = 1000', 'Set2'),
+             plottsne(df.p30.it1000, 'tSNE perplexite = 30, Max Iteration = 1000', 'Set2'),
+             plottsne(df.p60.it1000, 'tSNE perplexite = 60, Max Iteration = 1000', 'Set2'),
+             plottsne(df.p120.it1000, 'tSNE perplexite = 120, Max Iteration = 1000', 'Set2'),
+             plottsne(df.p300.it1000, 'tSNE perplexite = 300, Max Iteration = 1000', 'Set2'), nrow=2)
+```
+
+Dans le graphique au dessus, on fixe le maximum d'iterations et on fait varier la perplexité. On peut voir qu'avec une perplexité petite, notre modèle n'est pas bien défini : beaucoup de données ne sont pas regroupées, et les clusters sont mal définis.  En revanche pour les perplexités élevées, on n'obtient pas toujours de bons modèles, certains clusters qui sont un peu alongés, parce que le tSNE n'a pas le temps de finir de s'éxecuter.  Finalement, une bonne perplexité ici est environ 60.  
+
+```{r, echo=FALSE}
+#Plot des differents max iteration
+grid.arrange(plottsne(df.p60.it100, 'tSNE perplexite = 60, Max Iteration = 100', 'Set2'),
+             plottsne(df.p60.it500, 'tSNE perplexite = 60, Max Iteration = 500', 'Set2'),
+             plottsne(df.p60.it1000, 'tSNE perplexite = 60, Max Iteration = 1000', 'Set2'),
+             plottsne(df.p60.it2000, 'tSNE perplexite = 60, Max Iteration = 2000', 'Set2'),
+             plottsne(df.p60.it3000, 'tSNE perplexite = 60, Max Iteration = 3000', 'Set2'),
+             plottsne(df.p60.it4000, 'tSNE perplexite = 60, Max Iteration = 4000', 'Set2'), nrow=2)
+
+dcols <- densCols(df.pca)
+```
+Si on fixe le perplexité et qu'on regarde l'impact du nombre maximum d'iterations, on peut voir qu'avec un nombre faible, l'algorithme n'a pas fini a les regrouper en clusters.  Mais qu'après un certain seuil, ici ~2000 iterations, les graphiques ne changent plus beaucoup.  Les graphiques s'améliorent toujours mais le temps de calcul est beaucoup plus long comme on peut voir dans le tableau ci-dessous.  Finalement, les bonnes paramètres a garder sont une perplexité de 60 et un max.iteration de 3000.
+```{r , results='asis', echo = FALSE}
+knitr::kable(list(head(time.date2),head(time.data)), caption = "Temps de calcul en fonction de la perplexité et du nombre d'itérations",format="latex",label="Stat",booktabs = T,linesep ="") %>%
+  kable_styling(latex_options =c("striped", "HOLD_position"))
+```
+
+
+```{r, echo=FALSE}
+#time.data
+#time.date2
+```
+
+
+
+```{r, include=FALSE}
+### III-CLUSTERING
+
+## keeping original data
+tsne_kmeans=df.p60.it3000
+pca_kmeans<-as.data.frame(Y.pca$ind$coord)
+X_kmeans<-as.data.frame(X)
+
+## Creating k-means clustering model on initial space, and assigning the result to the data 
+k<-15
+set.seed(1)
+fit_cluster_kmeans=kmeans(scale(X_kmeans), k)  
+X_kmeans$cl_kmeans = factor(fit_cluster_kmeans$cluster)
+
+
+## Creating k-means clustering model on t-sne, and assigning the result to the data 
+set.seed(1)
+fit_cluster_kmeans=kmeans(scale(tsne_kmeans[,1:2]), k)  
+tsne_kmeans$cl_kmeans = factor(fit_cluster_kmeans$cluster)
+set.seed(3)
+fit_cluster_kmeans=kmeans(scale(tsne_kmeans[,1:2]), k)  
+tsne_kmeans$cl_kmeans_2 = factor(fit_cluster_kmeans$cluster)
+tsne_kmeans$cl_X_kmeans=X_kmeans$cl_kmeans
+## Adding tsne cluster color to pca coordinates
+#d_pca_1_original$cl_kmeans = factor(fit_cluster_kmeans$cluster)
+
+## Creating k-means clustering model on pca, and assigning the result to the data 
+set.seed(1)
+fit_cluster_kmeans=kmeans(scale(pca_kmeans), k)  
+pca_kmeans$cl_kmeans = factor(fit_cluster_kmeans$cluster)
+pca_kmeans$cl_X_kmeans=X_kmeans$cl_kmeans
+set.seed(1)
+fit_cluster_kmeans=kmeans(scale(pca_kmeans[,1:2]), k)  
+pca_kmeans$cl_2_kmeans = factor(fit_cluster_kmeans$cluster)
+set.seed(3)
+fit_cluster_kmeans=kmeans(scale(pca_kmeans[,-c(dim(pca_kmeans)[2],dim(pca_kmeans)[2]-1,dim(pca_kmeans)[2]-2)]), k)  
+pca_kmeans$cl_kmeans_2 = factor(fit_cluster_kmeans$cluster)
+```
+
+```{r, include=FALSE}
+# Define the number of colors you want
+mycolors <- colorRampPalette(brewer.pal(8, "Spectral"))(k)
+
+ploth=ggplot(pca_kmeans, aes_string(x="Dim.1", y="Dim.2", color="cl_X_kmeans")) +  
+  geom_point(size=0.25) +
+  guides(colour=guide_legend(override.aes=list(size=1))) +
+  xlab("Dim1") + ylab("Dim2") +
+  ggtitle("PCA") +
+  theme_light(base_size=5) +
+  theme(legend.position = "none")+ 
+  scale_fill_manual(values = mycolors) 
+
+plotk=ggplot(tsne_kmeans, aes_string(x="V1", y="V2", color="cl_X_kmeans")) +  
+  geom_point(size=0.25) +
+  guides(colour=guide_legend(override.aes=list(size=1))) +
+  xlab("") + ylab("") +
+  ggtitle("t-SNE perplexity = 60, max_iter = 3000") +
+  theme_light(base_size=5) +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        legend.direction = "horizontal", 
+        legend.position = "none",
+        legend.box = "horizontal")+ 
+  scale_fill_manual(values = mycolors) 
+
+## and finally: putting the plots side by side with gridExtra lib...
+plotv=ggplot(pca_kmeans, aes_string(x="Dim.1", y="Dim.2", color="cl_kmeans")) +  
+  geom_point(size=0.25) +
+  guides(colour=guide_legend(override.aes=list(size=1))) +
+  xlab("Dim1") + ylab("Dim2") +
+  ggtitle("PCA, toutes dimensions, seed=1") +
+  theme_light(base_size=5) +
+  theme(legend.position = "none")+ 
+  scale_fill_manual(values = mycolors) 
+
+plotx=ggplot(pca_kmeans, aes_string(x="Dim.1", y="Dim.2", color="cl_2_kmeans")) +  
+  geom_point(size=0.25) +
+  guides(colour=guide_legend(override.aes=list(size=1))) +
+  xlab("Dim1") + ylab("Dim2") +
+  ggtitle("PCA, 2 premières dimensions") +
+  theme_light(base_size=5) +
+  theme(legend.position = "none")+ 
+  scale_fill_manual(values = mycolors) 
+
+plotw=ggplot(tsne_kmeans, aes_string(x="V1", y="V2", color="cl_kmeans")) +  
+  geom_point(size=0.25) +
+  guides(colour=guide_legend(override.aes=list(size=1))) +
+  xlab("") + ylab("") +
+  ggtitle("t-SNE perplexity = 60, max_iter = 3000, seed=1") +
+  theme_light(base_size=5) +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        legend.direction = "horizontal", 
+        legend.position = "none",
+        legend.box = "horizontal")+ 
+  scale_fill_manual(values = mycolors) 
+
+ploty=ggplot(pca_kmeans, aes_string(x="Dim.1", y="Dim.2", color="cl_kmeans_2")) +  
+  geom_point(size=0.25) +
+  guides(colour=guide_legend(override.aes=list(size=1))) +
+  xlab("Dim1") + ylab("Dim2") +
+  ggtitle("PCA, toutes dimensions, seed=3") +
+  theme_light(base_size=5) +
+  theme(legend.position = "none")+ 
+  scale_fill_manual(values = mycolors) 
+
+plotz=ggplot(tsne_kmeans, aes_string(x="V1", y="V2", color="cl_kmeans_2")) +  
+  geom_point(size=0.25) +
+  guides(colour=guide_legend(override.aes=list(size=1))) +
+  xlab("") + ylab("") +
+  ggtitle("t-SNE perplexity = 60, max_iter = 3000, seed=3") +
+  theme_light(base_size=5) +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        legend.direction = "horizontal", 
+        legend.position = "none",
+        legend.box = "horizontal")+ 
+  scale_fill_manual(values = mycolors) 
+
+```
+
+
+```{r, include=FALSE}
+swap <- function(matrixRow,x,y){
+  #x is diagonal index
+  #y is max of the row
+  indexY <- which(matrixRow == y)
+  valX <- matrixRow[x]
+  matrixRow[x] <- y
+  matrixRow[indexY] <- valX
+  return(matrixRow)
+}
+
+mat.order=function(mat){
+  for(i in 1:nrow(mat)){
+    rowI <- mat[i,]
+    y <- max(rowI)
+    mat[i,] <- swap(rowI, i, y)
+  }
+  mat
+}
+```
+
+```{r, include=FALSE}
+test<-data.frame(espace_initial=X_kmeans$cl_kmeans, PCA_toutes_dimensions=pca_kmeans$cl_kmeans, PCA_2_dimensions=pca_kmeans$cl_2_kmeans, tSNE=tsne_kmeans$cl_kmeans)
+test1<-mat.order(table(test[,1:2]))
+test1<-mat.order(t(test1))
+test2<-mat.order(table(test[,c(1,3)]))
+test2<-mat.order(t(test2))
+test3<-mat.order(table(test[,c(1,4)]))
+test3<-mat.order(t(test3))
+
+mat.order(table(test[,1:2]))
+```
+# Comparaison des projections PCA et t-SNE avec les clusters identifiés par k-means dans l’espace original 
+
+Comparaison de la répartition des clusters K-means basés sur l'espace initial dans l'espace ACP et l'espace t-SNE :
+Dans le graphique ci-dessous, les groupes de l’espace initial sont bien distincts dans l’espace t-SNE (peu de points rouge au sein d’une grappe de points bleus par exemple). Au contraire, dans l’espace PCA, bien qu’on puisse identifier des zones ayant des colorations dominantes, toutes les zones ne sont pas d’une seule couleur notamment à l’embranchement (le centre sur Y dessiné par l’espace PCA) où au moins trois couleurs se mèlent. On peut donc dire que, sur notre jeu de données, l’espace t-SNE offre un espace plus favorable au clustering que l’espace PCA.
+
+```{r, echo=FALSE}
+grid.arrange(plotk, ploth,  ncol=2)
+```
+
+# Clustering dans les espaces PCA et t-SNE
+
+Interessons nous aux clusters déterminés par la méthode K-means sur les espaces PCA et t-SNE. Il faut noter que l’espace PCA est difficile a représenter car il est en grande dimension. Sur un plan 2D, t-SNE offre une visualisation plus clair de ses clusters. 
+
+```{r, echo=FALSE}
+grid.arrange(plotw, plotv, plotz, ploty,  ncol=2)
+```
+De plus, on constate qu’en répétant l’algorithme K-means avec des initialisations différentes (set.seed), les résultats sont plus variables dans l’espace PCA que t-SNE. Il apparait que dans l’espace PCA, dont la densité est plus homogène, les clusters sont plus aléatoires que dans l’espace t-SNE. Ce principe de densité est représenté dans la figure suivante.
+
+```{r, echo=FALSE}
+#Plot du Tsne vs. PCA densité
+grid.arrange(ggplot(df.p60.it3000, aes(x=V1, y=V2)) +
+               geom_pointdensity(size=0.5) +
+               guides(colour=guide_legend(override.aes=list(size=6))) +
+               xlab("") + ylab("") +
+               ggtitle('tsne') +
+               theme_light(base_size=5) +
+               theme(axis.text.x=element_blank(),
+                     axis.text.y=element_blank())+
+               scale_color_continuous(trans='reverse'),
+             ggplot(df.pca, aes(x=Dim.1, y=Dim.2)) +
+               geom_pointdensity(size=0.5) +
+               guides(colour=guide_legend(override.aes=list(size=6))) +
+               xlab("") + ylab("") +
+               ggtitle('pca') +
+               theme_light(base_size=5) +
+               theme(axis.text.x=element_blank(),
+                     axis.text.y=element_blank())+
+               scale_color_continuous(trans='reverse'), nrow=1)
+
+```
+
+# Tableau de contingence
+
+Comparons deux à deux les clusters trouvés sur l’espace initial, l’espace réduit (PCA) et avec la méthode t-SNE. Les graphiques ci-dessous sont des illustrations du tableau de contingence. Dans le graphique PCA Vs espace initial, il y a moins de cases sombres sur la diagonale, indiquant un désaccord de classification, que dans le graphique t-SNE Vs espace initial.
+
+```{r, echo=FALSE, fig.show='hold', out.width="33%"}
+par(mar = c(0.5, 6, 5.5, 0.5))
+color2D.matplot(test3, show.values = F, axes=F,xlab = "t-SNE",main= "t-SNE",ylab = "espace initial",vcol = "black",extremes = c("white", "black"))
+axis(3, at = seq_len(ncol(test3)) - 0.5,labels = unlist(dimnames(test3)[2]), tick = FALSE, cex.axis = 2)
+axis(2, at = seq_len(nrow(test3)) -0.5,labels = rev(unlist(dimnames(test3)[1])),las = 1, tick = FALSE, cex.axis = 2)
+
+color2D.matplot(test2, show.values = F, axes=F,xlab = "PCA, 2 dimensions",main= "PCA, 2 dimensions",ylab = "espace initial",vcol = "black",extremes = c("white", "black"))
+axis(3, at = seq_len(ncol(test2)) - 0.5,labels = unlist(dimnames(test2)[2]), tick = FALSE, cex.axis = 2)
+axis(2, at = seq_len(nrow(test2)) -0.5,labels = rev(unlist(dimnames(test2)[1])),las = 1, tick = FALSE, cex.axis = 2)
+
+color2D.matplot(test1, show.values = F, axes=F,xlab = "PCA, toutes dimensions",main= "PCA, toutes dimensions",ylab = "espace initial",vcol = "black",extremes = c("white", "black"))
+axis(3, at = seq_len(ncol(test1)) - 0.5,labels = unlist(dimnames(test1)[2]), tick = FALSE, cex.axis = 2)
+axis(2, at = seq_len(nrow(test1)) -0.5,labels = rev(unlist(dimnames(test1)[1])),las = 1, tick = FALSE, cex.axis = 2)
+```
+
+# Conclusion
+
+Tout au long de notre étude, nous avons abordé non seulement la méthode t-sne qui est une réduction de dimension non-linéaire mais aussi l’ACP afin de les comparer. Ces deux méthodes ont des avantages et des inconvénients selon les paramètres (nombre de composantes, le nombre d’itération et la perplexité), et les données. Même le choix de la méthode dépend de l'application visée selon le compromis entre qualité, performance, simplicité, et taille de données a étudier, il apparaît dans notre cas que t-sne est meilleur par rapport à l’ACP.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
